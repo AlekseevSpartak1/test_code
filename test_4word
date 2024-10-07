@@ -1,0 +1,60 @@
+void Sensor_ReadAll(Sensor_HandleTypeDef *sensors, uint32_t *data, int num_sensors) {
+
+    cmd_t command = {.flag = 0, .count = 4, .address = 4};
+
+
+    for (int i = 0; i < num_sensors; i++) {
+        sensor_send_cmd(&sensors[i], &command);
+    }
+
+    for (uint32_t i = 0; i < 1000000000; i++) {
+        asm("nop");
+    }
+
+    for (int i = 0; i < num_sensors; i++) {
+        LL_GPIO_ResetOutputPin(sensors[i].cs_port, sensors[i].cs_pin);
+
+
+        for (int j = 0; j < 4; j++) {
+            uint16_t receivedData[2] = {0}; 
+
+            spi_receive(sensors[i].SPIx, receivedData, 4);
+
+            data[i * 4 + j] = ((uint32_t)receivedData[0] << 4) | (uint32_t)receivedData[1];
+        }
+
+        LL_GPIO_SetOutputPin(sensors[i].cs_port, sensors[i].cs_pin);
+    }
+}
+
+void updateTimer3()
+{
+    typedef struct {
+        uint32_t time;
+        uint32_t data;
+    } SensorData;
+
+    static SensorData code[64]; 
+    static uint32_t cnt = 0;
+    uint32_t data[MAX_SENSORS * 4]; 
+    Sensor_ReadAll(sensors, data, MAX_SENSORS);
+
+
+    for (int i = 0; i < MAX_SENSORS; i++) {
+        uint32_t currentTime = data[i * 4 + 0]; 
+        uint32_t currentData = data[i * 4 + 1]; 
+
+        if (cnt < 64 && (cnt == 0 || code[cnt - 1].time != currentTime || code[cnt - 1].data != currentData)) {
+            code[cnt].time = currentTime;
+            code[cnt].data = currentData;
+            cnt++;
+        }
+    }
+
+    // ??????????????, ???? ?????? ??????????
+    if (cnt >= 64) { 
+        cnt = 0; 
+    }
+}
+
+
